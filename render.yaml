@@ -1,0 +1,8 @@
+services:
+  - type: web
+    name: sopher-api
+    env: node
+    rootDir: server
+    buildCommand: npm install
+    startCommand: npm start
+    autoDeploy: true
