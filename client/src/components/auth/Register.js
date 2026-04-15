@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, Navigate } from 'react-router-dom';
 import { useSelector, useDispatch } from 'react-redux';
 import { register } from '../../slices/authSlice';
@@ -14,6 +14,7 @@ const Register = () => {
     password: '',
     password2: ''
   });
+  const [registering, setRegistering] = useState(false);
 
   const { name, email, password, password2 } = formData;
 
@@ -24,6 +25,7 @@ const Register = () => {
     if (password !== password2) {
       toast.error('Passwords do not match');
     } else {
+      setRegistering(true);
       try {
         await dispatch(register({ name, email, password })).unwrap();
         toast.success('Registration successful!');
@@ -31,9 +33,15 @@ const Register = () => {
         if (err.errors) {
           err.errors.forEach((error) => toast.error(error.msg));
         }
+      } finally {
+        setRegistering(false);
       }
     }
   };
+
+  useEffect(() => {
+    document.title = 'Register | Sopher';
+  }, []);
 
   if (isAuthenticated) {
     return <Navigate to="/dashboard" />;
@@ -95,8 +103,12 @@ const Register = () => {
               required
             />
           </div>
-          <button type="submit" className="btn btn-primary btn-block">
-            Register
+          <button
+            type="submit"
+            className="btn btn-primary btn-block"
+            disabled={registering}
+          >
+            {registering ? 'Creating account…' : 'Register'}
           </button>
         </form>
         <p className="auth-footer">

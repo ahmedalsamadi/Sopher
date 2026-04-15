@@ -4,6 +4,7 @@ const auth = require('../../middleware/auth');
 const { check, validationResult } = require('express-validator');
 const multer = require('multer');
 const path = require('path');
+const crypto = require('crypto');
 
 // Simple URL normalizer (normalize-url v8+ is ESM-only)
 const normalizeUrl = (url) => {
@@ -23,7 +24,8 @@ const storage = multer.diskStorage({
     cb(null, path.join(__dirname, '../../uploads'));
   },
   filename: function (req, file, cb) {
-    cb(null, `avatar-${req.user.id}-${Date.now()}${path.extname(file.originalname)}`);
+    const ext = path.extname(file.originalname).toLowerCase();
+    cb(null, `avatar-${req.user.id}-${Date.now()}${ext}`);
   }
 });
 
@@ -47,7 +49,7 @@ const User = require('../../models/User');
 // @access  Private
 router.get('/me', auth, async (req, res) => {
   try {
-    const profile = await Profile.findOne({ user: req.user.id }).populate('user', ['name', 'avatar']);
+    const profile = await Profile.findOne({ user: req.user.id }).populate('user', ['name', 'avatar']).lean();
 
     if (!profile) {
       return res.status(400).json({ msg: 'There is no profile for this user' });
@@ -115,7 +117,7 @@ router.post('/', auth, async (req, res) => {
 // @access  Public
 router.get('/', async (req, res) => {
   try {
-    const profiles = await Profile.find().populate('user', ['name', 'avatar']);
+    const profiles = await Profile.find().populate('user', ['name', 'avatar']).lean();
     res.json(profiles);
   } catch (err) {
     console.error(err.message);
@@ -128,15 +130,33 @@ router.get('/', async (req, res) => {
 // @access  Public
 router.get('/user/:user_id', async (req, res) => {
   try {
-    const profile = await Profile.findOne({ user: req.params.user_id }).populate('user', ['name', 'avatar']);
+    let profile = await Profile.findOne({ user: req.params.user_id }).populate('user', ['name', 'avatar']).lean();
 
-    if (!profile) return res.status(400).json({ msg: 'Profile not found' });
+    if (!profile) {
+      // Check if user exists at all
+      const userObj = await User.findById(req.params.user_id).select('name avatar').lean();
+      if (!userObj) {
+        return res.status(404).json({ msg: 'User not found' });
+      }
+      // Return a default profile
+      profile = {
+        user: {
+          _id: userObj._id,
+          name: userObj.name,
+          avatar: userObj.avatar
+        },
+        bio: '',
+        location: '',
+        website: '',
+        social: {}
+      };
+    }
 
     return res.json(profile);
   } catch (err) {
     console.error(err.message);
     if (err.kind === 'ObjectId') {
-      return res.status(400).json({ msg: 'Profile not found' });
+      return res.status(404).json({ msg: 'User not found' });
     }
     return res.status(500).json({ msg: 'Server error' });
   }
@@ -147,9 +167,38 @@ router.get('/user/:user_id', async (req, res) => {
 // @access  Private
 router.delete('/', auth, async (req, res) => {
   try {
-    // Remove user posts
     const Post = require('../../models/Post');
+    const Notification = require('../../models/Notification');
+
+    // Remove user posts
     await Post.deleteMany({ user: req.user.id });
+
+    // Remove all notifications sent by or to this user
+    await Notification.deleteMany({
+      $or: [{ sender: req.user.id }, { recipient: req.user.id }]
+    });
+
+    // Remove this user from all other users' followers / following arrays
+    await User.updateMany(
+      {},
+      {
+        $pull: {
+          followers: { user: req.user.id },
+          following: { user: req.user.id }
+        }
+      }
+    );
+
+    // Remove user's likes and comments from all posts
+    await Post.updateMany(
+      {},
+      {
+        $pull: {
+          likes: { user: req.user.id },
+          comments: { user: req.user.id }
+        }
+      }
+    );
 
     // Remove profile
     await Profile.findOneAndDelete({ user: req.user.id });
@@ -191,7 +240,7 @@ router.put('/avatar', auth, upload.single('avatar'), async (req, res) => {
 router.get('/posts/:user_id', auth, async (req, res) => {
   try {
     const Post = require('../../models/Post');
-    const posts = await Post.find({ user: req.params.user_id }).sort({ date: -1 });
+    const posts = await Post.find({ user: req.params.user_id }).sort({ date: -1 }).limit(50).lean();
     res.json(posts);
   } catch (err) {
     console.error(err.message);

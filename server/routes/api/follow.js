@@ -38,15 +38,20 @@ router.put('/:user_id', auth, async (req, res) => {
     currentUser.following.unshift({ user: req.params.user_id });
     await currentUser.save();
 
-    // Create follow notification
-    const notification = new Notification({
-      recipient: targetUser._id,
-      sender: req.user.id,
-      type: 'follow',
-      senderName: currentUser.name,
-      senderAvatar: currentUser.avatar
-    });
-    await notification.save();
+    // Create follow notification (upsert to avoid duplicates on re-follow)
+    await Notification.findOneAndUpdate(
+      { recipient: targetUser._id, sender: req.user.id, type: 'follow' },
+      {
+        recipient: targetUser._id,
+        sender: req.user.id,
+        type: 'follow',
+        senderName: currentUser.name,
+        senderAvatar: currentUser.avatar,
+        read: false,
+        date: Date.now()
+      },
+      { upsert: true, new: true }
+    );
 
     res.json({
       followers: targetUser.followers,
@@ -93,6 +98,13 @@ router.delete('/:user_id', auth, async (req, res) => {
     );
     await currentUser.save();
 
+    // Remove the follow notification
+    await Notification.findOneAndDelete({
+      recipient: targetUser._id,
+      sender: req.user.id,
+      type: 'follow'
+    });
+
     res.json({
       followers: targetUser.followers,
       following: currentUser.following
@@ -108,7 +120,7 @@ router.delete('/:user_id', auth, async (req, res) => {
 // @access  Private
 router.get('/suggestions', auth, async (req, res) => {
   try {
-    const currentUser = await User.findById(req.user.id);
+    const currentUser = await User.findById(req.user.id).select('following').lean();
     const followingIds = currentUser.following.map((f) => f.user.toString());
     followingIds.push(req.user.id); // exclude self
 
@@ -117,7 +129,8 @@ router.get('/suggestions', auth, async (req, res) => {
       _id: { $nin: followingIds }
     })
       .select('-password')
-      .limit(20);
+      .limit(20)
+      .lean();
 
     res.json(suggestions);
   } catch (err) {
@@ -131,16 +144,17 @@ router.get('/suggestions', auth, async (req, res) => {
 // @access  Private
 router.get('/following-feed', auth, async (req, res) => {
   try {
-    const currentUser = await User.findById(req.user.id);
+    const currentUser = await User.findById(req.user.id).select('following').lean();
     const followingIds = currentUser.following.map((f) => f.user);
 
     if (followingIds.length === 0) {
       return res.json([]);
     }
 
-    const posts = await Post.find({ user: { $in: followingIds } }).sort({
-      date: -1
-    });
+    const posts = await Post.find({ user: { $in: followingIds } })
+      .sort({ date: -1 })
+      .limit(50)
+      .lean();
 
     res.json(posts);
   } catch (err) {
@@ -154,7 +168,7 @@ router.get('/following-feed', auth, async (req, res) => {
 // @access  Private
 router.get('/status/:user_id', auth, async (req, res) => {
   try {
-    const targetUser = await User.findById(req.params.user_id).select('-password');
+    const targetUser = await User.findById(req.params.user_id).select('followers following').lean();
     if (!targetUser) return res.status(404).json({ msg: 'User not found' });
 
     const isFollowing = targetUser.followers.some(

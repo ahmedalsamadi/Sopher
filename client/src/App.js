@@ -1,5 +1,7 @@
-import React from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import React, { useEffect } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { useDispatch } from 'react-redux';
+import { loadUser } from './slices/authSlice';
 import { Provider } from 'react-redux';
 import store from './store';
 import { ToastContainer } from 'react-toastify';
@@ -23,15 +25,30 @@ import './App.css';
 function App() {
   return (
     <Provider store={store}>
-      <Router>
-        <div className="App">
-          <Navbar />
-          <ToastContainer
-            position="top-right"
-            autoClose={3000}
-            hideProgressBar={false}
-            theme="dark"
-          />
+      <AppInner />
+    </Provider>
+  );
+}
+
+function AppInner() {
+  const dispatch = useDispatch();
+
+  useEffect(() => {
+    if (localStorage.getItem('token')) {
+      dispatch(loadUser());
+    }
+  }, [dispatch]);
+
+  return (
+    <Router>
+      <div className="App">
+        <Navbar />
+        <ToastContainer
+          position="top-right"
+          autoClose={3000}
+          hideProgressBar={false}
+          theme="dark"
+        />
           <Routes>
             <Route path="/" element={<Landing />} />
             <Route path="/login" element={<Login />} />
@@ -46,6 +63,14 @@ function App() {
             />
             <Route
               path="/profile"
+              element={
+                <PrivateRoute>
+                  <ProfilePage />
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/profile/:id"
               element={
                 <PrivateRoute>
                   <ProfilePage />
@@ -92,10 +117,10 @@ function App() {
                 </PrivateRoute>
               }
             />
+            <Route path="*" element={<Navigate to="/" />} />
           </Routes>
         </div>
       </Router>
-    </Provider>
   );
 }
 

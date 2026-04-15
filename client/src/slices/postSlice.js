@@ -7,7 +7,7 @@ export const getPosts = createAsyncThunk('post/getPosts', async (_, { rejectWith
     const res = await api.get('/posts');
     return res.data;
   } catch (err) {
-    return rejectWithValue(err.response.data);
+    return rejectWithValue(err.response?.data || { msg: 'Network error' });
   }
 });
 
@@ -22,7 +22,7 @@ export const addPost = createAsyncThunk('post/addPost', async (formData, { rejec
     const res = await api.post('/posts', formData, config);
     return res.data;
   } catch (err) {
-    return rejectWithValue(err.response.data);
+    return rejectWithValue(err.response?.data || { msg: 'Network error' });
   }
 });
 
@@ -32,7 +32,7 @@ export const deletePost = createAsyncThunk('post/deletePost', async (id, { rejec
     await api.delete(`/posts/${id}`);
     return id;
   } catch (err) {
-    return rejectWithValue(err.response.data);
+    return rejectWithValue(err.response?.data || { msg: 'Network error' });
   }
 });
 
@@ -42,7 +42,7 @@ export const likePost = createAsyncThunk('post/likePost', async (id, { rejectWit
     const res = await api.put(`/posts/like/${id}`);
     return res.data; // now returns full post
   } catch (err) {
-    return rejectWithValue(err.response.data);
+    return rejectWithValue(err.response?.data || { msg: 'Network error' });
   }
 });
 
@@ -52,7 +52,7 @@ export const unlikePost = createAsyncThunk('post/unlikePost', async (id, { rejec
     const res = await api.put(`/posts/unlike/${id}`);
     return res.data; // now returns full post
   } catch (err) {
-    return rejectWithValue(err.response.data);
+    return rejectWithValue(err.response?.data || { msg: 'Network error' });
   }
 });
 
@@ -62,7 +62,7 @@ export const addComment = createAsyncThunk('post/addComment', async ({ postId, t
     const res = await api.post(`/posts/comment/${postId}`, { text });
     return res.data; // returns full post
   } catch (err) {
-    return rejectWithValue(err.response.data);
+    return rejectWithValue(err.response?.data || { msg: 'Network error' });
   }
 });
 
@@ -72,7 +72,7 @@ export const deleteComment = createAsyncThunk('post/deleteComment', async ({ pos
     const res = await api.delete(`/posts/comment/${postId}/${commentId}`);
     return res.data; // returns full post
   } catch (err) {
-    return rejectWithValue(err.response.data);
+    return rejectWithValue(err.response?.data || { msg: 'Network error' });
   }
 });
 
@@ -87,6 +87,9 @@ const postSlice = createSlice({
   reducers: {},
   extraReducers: (builder) => {
     builder
+      .addCase(getPosts.pending, (state) => {
+        state.loading = true;
+      })
       .addCase(getPosts.fulfilled, (state, action) => {
         state.posts = action.payload;
         state.loading = false;
@@ -99,29 +102,47 @@ const postSlice = createSlice({
         state.posts.unshift(action.payload);
         state.loading = false;
       })
+      .addCase(addPost.rejected, (state, action) => {
+        state.error = action.payload;
+      })
       .addCase(deletePost.fulfilled, (state, action) => {
         state.posts = state.posts.filter((post) => post._id !== action.payload);
         state.loading = false;
+      })
+      .addCase(deletePost.rejected, (state, action) => {
+        state.error = action.payload;
       })
       .addCase(likePost.fulfilled, (state, action) => {
         state.posts = state.posts.map((post) =>
           post._id === action.payload._id ? action.payload : post
         );
       })
+      .addCase(likePost.rejected, (state, action) => {
+        state.error = action.payload;
+      })
       .addCase(unlikePost.fulfilled, (state, action) => {
         state.posts = state.posts.map((post) =>
           post._id === action.payload._id ? action.payload : post
         );
+      })
+      .addCase(unlikePost.rejected, (state, action) => {
+        state.error = action.payload;
       })
       .addCase(addComment.fulfilled, (state, action) => {
         state.posts = state.posts.map((post) =>
           post._id === action.payload._id ? action.payload : post
         );
       })
+      .addCase(addComment.rejected, (state, action) => {
+        state.error = action.payload;
+      })
       .addCase(deleteComment.fulfilled, (state, action) => {
         state.posts = state.posts.map((post) =>
           post._id === action.payload._id ? action.payload : post
         );
+      })
+      .addCase(deleteComment.rejected, (state, action) => {
+        state.error = action.payload;
       });
   }
 });

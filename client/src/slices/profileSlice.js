@@ -7,7 +7,17 @@ export const getCurrentProfile = createAsyncThunk('profile/getCurrentProfile', a
     const res = await api.get('/profile/me');
     return res.data;
   } catch (err) {
-    return rejectWithValue(err.response.data);
+    return rejectWithValue(err.response?.data || { msg: 'Network error' });
+  }
+});
+
+// Get profile by ID
+export const getProfileById = createAsyncThunk('profile/getProfileById', async (userId, { rejectWithValue }) => {
+  try {
+    const res = await api.get(`/profile/user/${userId}`);
+    return res.data;
+  } catch (err) {
+    return rejectWithValue(err.response?.data || { msg: 'Network error' });
   }
 });
 
@@ -17,7 +27,7 @@ export const createProfile = createAsyncThunk('profile/createProfile', async (fo
     const res = await api.post('/profile', formData);
     return res.data;
   } catch (err) {
-    return rejectWithValue(err.response.data);
+    return rejectWithValue(err.response?.data || { msg: 'Network error' });
   }
 });
 
@@ -27,7 +37,7 @@ export const deleteAccount = createAsyncThunk('profile/deleteAccount', async (_,
     await api.delete('/profile');
     return true;
   } catch (err) {
-    return rejectWithValue(err.response.data);
+    return rejectWithValue(err.response?.data || { msg: 'Network error' });
   }
 });
 
@@ -52,6 +62,17 @@ const profileSlice = createSlice({
         state.loading = false;
       })
       .addCase(getCurrentProfile.rejected, (state, action) => {
+        state.error = action.payload;
+        state.loading = false;
+      })
+      .addCase(getProfileById.pending, (state) => {
+        state.loading = true;
+      })
+      .addCase(getProfileById.fulfilled, (state, action) => {
+        state.profile = action.payload;
+        state.loading = false;
+      })
+      .addCase(getProfileById.rejected, (state, action) => {
         state.error = action.payload;
         state.loading = false;
       })

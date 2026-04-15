@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { getPosts, likePost, unlikePost, deletePost, addComment, deleteComment } from '../../slices/postSlice';
 import { getFollowingFeed } from '../../slices/followSlice';
-import { loadUser } from '../../slices/authSlice';
 import { Link } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { getAssetUrl } from '../../utils/api';
@@ -10,14 +9,14 @@ import { getAssetUrl } from '../../utils/api';
 const Feed = () => {
   const dispatch = useDispatch();
   const { posts, loading } = useSelector((state) => state.post);
-  const { followingFeed, loading: followLoading } = useSelector((state) => state.follow);
+  const { followingFeed } = useSelector((state) => state.follow);
   const { user } = useSelector((state) => state.auth);
   const [expandedComments, setExpandedComments] = useState({});
   const [commentTexts, setCommentTexts] = useState({});
   const [activeTab, setActiveTab] = useState('forYou'); // 'forYou' | 'following'
 
   useEffect(() => {
-    dispatch(loadUser());
+    document.title = 'Feed | Sopher';
     dispatch(getPosts());
     dispatch(getFollowingFeed());
   }, [dispatch]);
@@ -166,7 +165,9 @@ const Feed = () => {
                       )}
                     </div>
                     <div>
-                      <p className="feed-author-name">{post.name}</p>
+                      <Link to={`/profile/${post.user}`} style={{ textDecoration: 'none', color: 'inherit' }}>
+                        <p className="feed-author-name">{post.name}</p>
+                      </Link>
                       <p className="feed-post-time">{formatDate(post.date)}</p>
                     </div>
                   </div>
@@ -190,6 +191,7 @@ const Feed = () => {
                         src={getAssetUrl(post.image)}
                         alt="Post"
                         className="feed-post-image"
+                        loading="lazy"
                       />
                     </div>
                   )}
@@ -260,14 +262,16 @@ const Feed = () => {
                             </div>
                             <div className="comment-body">
                               <div className="comment-header">
-                                <span className="comment-author">{comment.name}</span>
+                                <Link to={`/profile/${comment.user}`} style={{ textDecoration: 'none', color: 'inherit' }}>
+                                  <span className="comment-author">{comment.name}</span>
+                                </Link>
                                 <span className="comment-date">
                                   {formatDate(comment.date)}
                                 </span>
                               </div>
                               <p className="comment-text">{comment.text}</p>
                             </div>
-                            {user?._id === comment.user && (
+                            {(user?._id === comment.user || user?._id === post.user) && (
                               <button
                                 className="comment-delete-btn"
                                 onClick={() =>

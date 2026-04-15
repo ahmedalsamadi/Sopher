@@ -4,6 +4,7 @@ const { check, validationResult } = require('express-validator');
 const auth = require('../../middleware/auth');
 const multer = require('multer');
 const path = require('path');
+const crypto = require('crypto');
 
 const Post = require('../../models/Post');
 const User = require('../../models/User');
@@ -15,7 +16,8 @@ const storage = multer.diskStorage({
     cb(null, path.join(__dirname, '../../uploads'));
   },
   filename: function (req, file, cb) {
-    cb(null, `${Date.now()}-${file.originalname}`);
+    const ext = path.extname(file.originalname).toLowerCase();
+    cb(null, `${Date.now()}-${crypto.randomBytes(8).toString('hex')}${ext}`);
   }
 });
 
@@ -68,7 +70,7 @@ router.post(
 // @access  Private
 router.get('/', auth, async (req, res) => {
   try {
-    const posts = await Post.find().sort({ date: -1 });
+    const posts = await Post.find().sort({ date: -1 }).limit(50).lean();
     res.json(posts);
   } catch (err) {
     console.error(err.message);
@@ -81,28 +83,33 @@ router.get('/', auth, async (req, res) => {
 // @access  Private
 router.get('/popular', auth, async (req, res) => {
   try {
-    const { period } = req.query; // 'week' | 'month' | all
-    let query = {};
+    const { period } = req.query;
+    let match = {};
     if (period === 'week') {
       const since = new Date();
       since.setDate(since.getDate() - 7);
-      query.date = { $gte: since };
+      match.date = { $gte: since };
     } else if (period === 'month') {
       const since = new Date();
       since.setMonth(since.getMonth() - 1);
-      query.date = { $gte: since };
+      match.date = { $gte: since };
     }
 
-    const posts = await Post.find(query);
-
-    // Score: likes * 2 + comments
-    const scored = posts
-      .map((p) => ({
-        ...p.toObject(),
-        score: (p.likes?.length || 0) * 2 + (p.comments?.length || 0)
-      }))
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 50);
+    const scored = await Post.aggregate([
+      { $match: match },
+      {
+        $addFields: {
+          score: {
+            $add: [
+              { $multiply: [{ $size: { $ifNull: ['$likes', []] } }, 2] },
+              { $size: { $ifNull: ['$comments', []] } }
+            ]
+          }
+        }
+      },
+      { $sort: { score: -1 } },
+      { $limit: 50 }
+    ]);
 
     res.json(scored);
   } catch (err) {
@@ -116,7 +123,7 @@ router.get('/popular', auth, async (req, res) => {
 // @access  Private
 router.get('/:id', auth, async (req, res) => {
   try {
-    const post = await Post.findById(req.params.id);
+    const post = await Post.findById(req.params.id).lean();
     if (!post) {
       return res.status(404).json({ msg: 'Post not found' });
     }
@@ -282,7 +289,8 @@ router.delete('/comment/:id/:comment_id', auth, async (req, res) => {
       return res.status(404).json({ msg: 'Comment does not exist' });
     }
 
-    if (comment.user.toString() !== req.user.id) {
+    // Allow comment author OR post owner to delete
+    if (comment.user.toString() !== req.user.id && post.user.toString() !== req.user.id) {
       return res.status(401).json({ msg: 'User not authorized' });
     }
 

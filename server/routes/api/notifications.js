@@ -10,7 +10,8 @@ router.get('/', auth, async (req, res) => {
   try {
     const notifications = await Notification.find({ recipient: req.user.id })
       .sort({ date: -1 })
-      .limit(50);
+      .limit(50)
+      .lean();
     res.json(notifications);
   } catch (err) {
     console.error(err.message);

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { useSelector, useDispatch } from 'react-redux';
 import { login } from '../../slices/authSlice';
@@ -14,6 +14,10 @@ const Login = () => {
   const [loggingIn, setLoggingIn] = useState(false);
 
   const { email, password } = formData;
+
+  useEffect(() => {
+    document.title = 'Login | Sopher';
+  }, []);
 
   const onChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
 

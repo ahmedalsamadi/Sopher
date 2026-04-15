@@ -1,19 +1,18 @@
 import React, { useEffect, useState } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { getSuggestions, followUser, unfollowUser } from '../../slices/followSlice';
-import { loadUser } from '../../slices/authSlice';
 import { toast } from 'react-toastify';
 import { getAssetUrl } from '../../utils/api';
+import { Link } from 'react-router-dom';
 
 const PeoplePage = () => {
   const dispatch = useDispatch();
-  const { suggestions, followingIds, loading } = useSelector((state) => state.follow);
-  const { user } = useSelector((state) => state.auth);
+  const { suggestions, followingIds, suggestionsLoading: loading } = useSelector((state) => state.follow);
   const [pendingIds, setPendingIds] = useState(new Set());
   const [search, setSearch] = useState('');
 
   useEffect(() => {
-    dispatch(loadUser());
+    document.title = 'Discover People | Sopher';
     dispatch(getSuggestions());
   }, [dispatch]);
 
@@ -97,7 +96,11 @@ const PeoplePage = () => {
                     )}
                   </div>
                   <div className="person-info">
-                    <h3 className="person-name">{person.name}</h3>
+                    <h3 className="person-name">
+                      <Link to={`/profile/${person._id}`} style={{ textDecoration: 'none', color: 'inherit' }}>
+                        {person.name}
+                      </Link>
+                    </h3>
                     <div className="person-stats">
                       <span className="person-stat">
                         <strong>{person.followers?.length || 0}</strong> followers

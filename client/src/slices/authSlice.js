@@ -2,24 +2,26 @@ import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import api from '../utils/api';
 
 // Register User
-export const register = createAsyncThunk('auth/register', async (formData, { rejectWithValue }) => {
+export const register = createAsyncThunk('auth/register', async (formData, thunkAPI) => {
   try {
     const res = await api.post('/users', formData);
     localStorage.setItem('token', res.data.token);
+    thunkAPI.dispatch(loadUser());
     return res.data;
   } catch (err) {
-    return rejectWithValue(err.response.data);
+    return thunkAPI.rejectWithValue(err.response?.data || { msg: 'Network error' });
   }
 });
 
 // Login User
-export const login = createAsyncThunk('auth/login', async (formData, { rejectWithValue }) => {
+export const login = createAsyncThunk('auth/login', async (formData, thunkAPI) => {
   try {
     const res = await api.post('/auth', formData);
     localStorage.setItem('token', res.data.token);
+    thunkAPI.dispatch(loadUser());
     return res.data;
   } catch (err) {
-    return rejectWithValue(err.response.data);
+    return thunkAPI.rejectWithValue(err.response?.data || { msg: 'Network error' });
   }
 });
 
@@ -29,7 +31,7 @@ export const loadUser = createAsyncThunk('auth/loadUser', async (_, { rejectWith
     const res = await api.get('/auth');
     return res.data;
   } catch (err) {
-    return rejectWithValue(err.response.data);
+    return rejectWithValue(err.response?.data || { msg: 'Network error' });
   }
 });
 

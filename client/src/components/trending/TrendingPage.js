@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { getPopularPosts } from '../../slices/followSlice';
 import { likePost, unlikePost } from '../../slices/postSlice';
-import { loadUser } from '../../slices/authSlice';
 import { toast } from 'react-toastify';
 import { getAssetUrl } from '../../utils/api';
 
@@ -14,14 +13,13 @@ const FILTERS = [
 
 const TrendingPage = () => {
   const dispatch = useDispatch();
-  const { popularPosts, loading } = useSelector((state) => state.follow);
+  const { popularPosts, popularLoading: loading } = useSelector((state) => state.follow);
   const { user } = useSelector((state) => state.auth);
-  const { posts } = useSelector((state) => state.post);
   const [activeFilter, setActiveFilter] = useState('all');
   const [expandedComments, setExpandedComments] = useState({});
 
   useEffect(() => {
-    dispatch(loadUser());
+    document.title = 'Trending | Sopher';
     dispatch(getPopularPosts(activeFilter));
   }, [dispatch, activeFilter]);
 
@@ -144,6 +142,7 @@ const TrendingPage = () => {
                         src={getAssetUrl(post.image)}
                         alt="Post"
                         className="trending-post-image"
+                        loading="lazy"
                       />
                     </div>
                   )}

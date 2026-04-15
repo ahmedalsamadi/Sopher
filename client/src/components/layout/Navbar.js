@@ -25,7 +25,9 @@ const Navbar = () => {
     if (isAuthenticated) {
       dispatch(getUnreadCount());
       const interval = setInterval(() => {
-        dispatch(getUnreadCount());
+        if (document.visibilityState === 'visible') {
+          dispatch(getUnreadCount());
+        }
       }, 30000);
       return () => clearInterval(interval);
     }

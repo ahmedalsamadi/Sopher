@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams, Link } from 'react-router-dom';
 import { loadUser, logout } from '../../slices/authSlice';
-import { getCurrentProfile, createProfile, deleteAccount, clearProfile } from '../../slices/profileSlice';
+import { getCurrentProfile, getProfileById, createProfile, deleteAccount, clearProfile } from '../../slices/profileSlice';
 import { getMyFollowLists, followUser, unfollowUser } from '../../slices/followSlice';
 import { toast } from 'react-toastify';
 import api, { getAssetUrl } from '../../utils/api';
@@ -90,10 +90,17 @@ const applyTheme = (themeId) => {
 const ProfilePage = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
+  const { id } = useParams();
   const { user } = useSelector((state) => state.auth);
+  const isCurrentUser = !id || (user && user._id === id);
+  const targetUserId = id || user?._id;
+
   const { profile, loading } = useSelector((state) => state.profile);
-  const { myFollowers, myFollowing, followersCount, followingCount } = useSelector((state) => state.follow);
+  const { followingIds } = useSelector((state) => state.follow);
   const fileInputRef = useRef(null);
+
+  const [targetFollowers, setTargetFollowers] = useState([]);
+  const [targetFollowing, setTargetFollowing] = useState([]);
 
   const [bio, setBio] = useState('');
   const [location, setLocation] = useState('');
@@ -118,17 +125,38 @@ const ProfilePage = () => {
   const [showFollowModal, setShowFollowModal] = useState(null); // 'followers' | 'following' | null
 
   useEffect(() => {
-    dispatch(loadUser());
-    dispatch(getCurrentProfile());
+    if (id) {
+      dispatch(getProfileById(id));
+    } else {
+      dispatch(getCurrentProfile());
+    }
     // Re-apply saved theme on mount
     applyTheme(localStorage.getItem('sopher-theme') || 'indigo');
-  }, [dispatch]);
+  }, [dispatch, id]);
+
+  // Dynamic page title
+  useEffect(() => {
+    const name = isCurrentUser ? 'My Profile' : (profile?.user?.name || 'Profile');
+    document.title = `${name} | Sopher`;
+  }, [isCurrentUser, profile?.user?.name]);
 
   useEffect(() => {
     if (user?._id) {
       dispatch(getMyFollowLists(user._id));
     }
   }, [dispatch, user?._id]);
+
+  useEffect(() => {
+    if (!targetUserId) return;
+    let cancelled = false;
+    api.get(`/follow/users/${targetUserId}`).then((res) => {
+      if (!cancelled) {
+        setTargetFollowers(res.data.followers);
+        setTargetFollowing(res.data.following);
+      }
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [targetUserId, followingIds]); // Reload when followingIds changes so the button reflects instant changes
 
   useEffect(() => {
     if (profile) {
@@ -139,22 +167,26 @@ const ProfilePage = () => {
   }, [profile]);
 
   useEffect(() => {
-    if (user) fetchUserPosts();
-  }, [user]);
-
-  const fetchUserPosts = async () => {
-    try {
-      const res = await api.get(`/profile/posts/${user._id}`);
-      setUserPosts(res.data);
-      setPostsLoading(false);
-    } catch {
-      setPostsLoading(false);
-    }
-  };
+    if (!targetUserId) return;
+    let cancelled = false;
+    const fetchUserPosts = async () => {
+      try {
+        const res = await api.get(`/profile/posts/${targetUserId}`);
+        if (!cancelled) setUserPosts(res.data);
+      } catch {
+        // ignore
+      } finally {
+        if (!cancelled) setPostsLoading(false);
+      }
+    };
+    fetchUserPosts();
+    return () => { cancelled = true; };
+  }, [targetUserId]);
 
   const handleAvatarUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
+    if (avatarPreview) URL.revokeObjectURL(avatarPreview);
     setAvatarPreview(URL.createObjectURL(file));
     const formData = new FormData();
     formData.append('avatar', file);
@@ -170,8 +202,24 @@ const ProfilePage = () => {
     }
   };
 
+  // Cleanup blob URLs on unmount
+  useEffect(() => {
+    return () => {
+      if (avatarPreview) URL.revokeObjectURL(avatarPreview);
+    };
+  }, [avatarPreview]);
+
   const handleSaveProfile = async (e) => {
     e.preventDefault();
+    if (bio.length > 300) {
+      return toast.error('Bio must be 300 characters or fewer');
+    }
+    if (location.length > 100) {
+      return toast.error('Location must be 100 characters or fewer');
+    }
+    if (website && !/^(https?:\/\/)?[\w.-]+\.\w{2,}(\/\S*)?$/i.test(website)) {
+      return toast.error('Please enter a valid website URL');
+    }
     try {
       await dispatch(createProfile({ bio, location, website })).unwrap();
       toast.success('Profile updated!');
@@ -206,7 +254,8 @@ const ProfilePage = () => {
 
   const getAvatarUrl = () => {
     if (avatarPreview) return avatarPreview;
-    if (user?.avatar) return getAssetUrl(user.avatar);
+    const u = isCurrentUser ? user : displayUser;
+    if (u?.avatar) return getAssetUrl(u.avatar);
     return null;
   };
 
@@ -217,9 +266,24 @@ const ProfilePage = () => {
       day: 'numeric',
     });
 
-  if (loading) return <div className="loading-spinner">Loading...</div>;
+  if (loading && !profile) return <div className="loading-spinner">Loading...</div>;
 
   const currentTheme = THEMES.find((t) => t.id === activeTheme) || THEMES[0];
+  const displayUser = isCurrentUser ? user : profile?.user;
+
+  const handleProfileFollow = async () => {
+    try {
+      await dispatch(followUser(targetUserId)).unwrap();
+      toast.success('Followed!');
+    } catch { toast.error('Failed to follow'); }
+  };
+
+  const handleProfileUnfollow = async () => {
+    try {
+      await dispatch(unfollowUser(targetUserId)).unwrap();
+      toast.success('Unfollowed');
+    } catch { toast.error('Failed to unfollow'); }
+  };
 
   return (
     <section className="profile-page">
@@ -229,18 +293,21 @@ const ProfilePage = () => {
           <div className="profile-avatar-section">
             <div
               className="profile-avatar-wrapper"
-              onClick={() => fileInputRef.current.click()}
+              onClick={() => isCurrentUser && fileInputRef.current.click()}
+              style={{ cursor: isCurrentUser ? 'pointer' : 'default' }}
             >
               {getAvatarUrl() ? (
                 <img src={getAvatarUrl()} alt="Profile" className="profile-avatar-img" />
               ) : (
                 <div className="profile-avatar-placeholder">
-                  <span>{user?.name?.charAt(0)?.toUpperCase() || '?'}</span>
+                  <span>{displayUser?.name?.charAt(0)?.toUpperCase() || '?'}</span>
                 </div>
               )}
-              <div className="profile-avatar-overlay">
-                <span>📷</span>
-              </div>
+              {isCurrentUser && (
+                <div className="profile-avatar-overlay">
+                  <span>📷</span>
+                </div>
+              )}
               <input
                 type="file"
                 ref={fileInputRef}
@@ -250,8 +317,8 @@ const ProfilePage = () => {
               />
             </div>
             <div className="profile-user-info">
-              <h1 className="profile-name">{user?.name}</h1>
-              <p className="profile-email">{user?.email}</p>
+              <h1 className="profile-name">{displayUser?.name || 'User'}</h1>
+              {isCurrentUser && <p className="profile-email">{user?.email}</p>}
               {profile?.location && (
                 <p className="profile-location">📍 {profile.location}</p>
               )}
@@ -261,7 +328,7 @@ const ProfilePage = () => {
                   id="btn-show-followers"
                   onClick={() => setShowFollowModal('followers')}
                 >
-                  <strong>{followersCount}</strong> <span>Followers</span>
+                  <strong>{targetFollowers.length}</strong> <span>Followers</span>
                 </button>
                 <span className="profile-follow-sep">·</span>
                 <button
@@ -269,7 +336,7 @@ const ProfilePage = () => {
                   id="btn-show-following"
                   onClick={() => setShowFollowModal('following')}
                 >
-                  <strong>{followingCount}</strong> <span>Following</span>
+                  <strong>{targetFollowing.length}</strong> <span>Following</span>
                 </button>
               </div>
             </div>
@@ -281,46 +348,63 @@ const ProfilePage = () => {
               {profile?.bio ? (
                 <p className="profile-bio-text">{profile.bio}</p>
               ) : (
-                <p className="profile-bio-empty">No bio yet. Tell us about yourself!</p>
+                <p className="profile-bio-empty">No bio yet.</p>
               )}
-              <div className="profile-action-row">
-                <button
-                  id="btn-edit-profile"
-                  className="btn btn-secondary btn-sm"
-                  onClick={() => setEditing(true)}
-                >
-                  ✏️ Edit Profile
-                </button>
-                <button
-                  id="btn-theme-picker"
-                  className="btn btn-theme-preview btn-sm"
-                  style={{ '--theme-color': currentTheme.primary }}
-                  onClick={() => setShowThemes(!showThemes)}
-                >
-                  🎨 Themes
-                </button>
-                <button
-                  id="btn-delete-account"
-                  className="btn btn-danger-outline btn-sm"
-                  onClick={() => {
-                    setDeleteConfirmText('');
-                    setShowDeleteModal(true);
-                  }}
-                >
-                  🗑️ Delete Account
-                </button>
-              </div>
+              {isCurrentUser ? (
+                <div className="profile-action-row">
+                  <button
+                    id="btn-edit-profile"
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => setEditing(true)}
+                  >
+                    ✏️ Edit Profile
+                  </button>
+                  <button
+                    id="btn-theme-picker"
+                    className="btn btn-theme-preview btn-sm"
+                    style={{ '--theme-color': currentTheme.primary }}
+                    onClick={() => setShowThemes(!showThemes)}
+                  >
+                    🎨 Themes
+                  </button>
+                  <button
+                    id="btn-delete-account"
+                    className="btn btn-danger-outline btn-sm"
+                    onClick={() => {
+                      setDeleteConfirmText('');
+                      setShowDeleteModal(true);
+                    }}
+                  >
+                    🗑️ Delete Account
+                  </button>
+                </div>
+              ) : (
+                displayUser && (
+                  <div className="profile-action-row">
+                    {followingIds.includes(targetUserId) ? (
+                      <button className="btn btn-secondary btn-sm" onClick={handleProfileUnfollow}>
+                        ✓ Following
+                      </button>
+                    ) : (
+                      <button className="btn btn-primary btn-sm" onClick={handleProfileFollow}>
+                        + Follow
+                      </button>
+                    )}
+                  </div>
+                )
+              )}
             </div>
           ) : (
             <form className="profile-edit-form" onSubmit={handleSaveProfile}>
               <div className="form-group">
-                <label htmlFor="profile-bio">Bio</label>
+                <label htmlFor="profile-bio">Bio <span style={{fontSize:'0.8rem',color:'var(--text-muted)'}}>({bio.length}/300)</span></label>
                 <textarea
                   id="profile-bio"
                   value={bio}
                   onChange={(e) => setBio(e.target.value)}
                   placeholder="Write something about yourself..."
                   rows="3"
+                  maxLength={300}
                 />
               </div>
               <div className="profile-edit-row">
@@ -332,6 +416,7 @@ const ProfilePage = () => {
                     value={location}
                     onChange={(e) => setLocation(e.target.value)}
                     placeholder="City, Country"
+                    maxLength={100}
                   />
                 </div>
                 <div className="form-group">
@@ -392,7 +477,7 @@ const ProfilePage = () => {
         {/* ── User Posts ── */}
         <div className="profile-posts-section">
           <h2 className="section-title">
-            My Posts
+            {isCurrentUser ? 'My Posts' : `${displayUser?.name?.split(' ')[0]}'s Posts`}
             <span className="post-count">{userPosts.length}</span>
           </h2>
           {postsLoading ? (
@@ -501,14 +586,14 @@ const ProfilePage = () => {
               <button className="follow-modal-close" onClick={() => setShowFollowModal(null)}>✕</button>
             </div>
             <div className="follow-modal-list">
-              {(showFollowModal === 'followers' ? myFollowers : myFollowing).length === 0 ? (
+              {(showFollowModal === 'followers' ? targetFollowers : targetFollowing).length === 0 ? (
                 <p className="follow-modal-empty">
                   {showFollowModal === 'followers'
                     ? 'No followers yet.'
-                    : "You're not following anyone yet."}
+                    : "Not following anyone yet."}
                 </p>
               ) : (
-                (showFollowModal === 'followers' ? myFollowers : myFollowing).map((item) => {
+                (showFollowModal === 'followers' ? targetFollowers : targetFollowing).map((item) => {
                   const person = item.user;
                   return (
                     <div key={person?._id || item._id} className="follow-modal-item" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
@@ -520,10 +605,12 @@ const ProfilePage = () => {
                             <span>{person?.name?.charAt(0)?.toUpperCase() || '?'}</span>
                           )}
                         </div>
-                        <span className="follow-modal-name">{person?.name || 'Unknown'}</span>
+                        <Link to={`/profile/${person?._id}`} style={{ textDecoration: 'none', color: 'inherit' }} onClick={() => setShowFollowModal(null)}>
+                          <span className="follow-modal-name">{person?.name || 'Unknown'}</span>
+                        </Link>
                       </div>
                       
-                      {showFollowModal === 'following' && person?._id && (
+                      {isCurrentUser && showFollowModal === 'following' && person?._id && (
                         <button
                           className="btn btn-danger-outline btn-sm"
                           style={{ padding: '0.3rem 0.6rem', fontSize: '0.8rem' }}

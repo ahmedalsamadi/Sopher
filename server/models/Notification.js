@@ -43,4 +43,7 @@ const NotificationSchema = new Schema({
   }
 });
 
+NotificationSchema.index({ recipient: 1, read: 1, date: -1 });
+NotificationSchema.index({ sender: 1, type: 1 });
+
 module.exports = mongoose.model('notification', NotificationSchema);

@@ -27,4 +27,6 @@ const ProfileSchema = new mongoose.Schema({
   }
 });
 
+ProfileSchema.index({ user: 1 }, { unique: true });
+
 module.exports = mongoose.model('profile', ProfileSchema);

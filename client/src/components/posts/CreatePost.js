@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useDispatch } from 'react-redux';
 import { addPost } from '../../slices/postSlice';
 import { useNavigate } from 'react-router-dom';
@@ -17,16 +17,26 @@ const CreatePost = () => {
   const handleImageSelect = (e) => {
     const file = e.target.files[0];
     if (file) {
+      if (imagePreview) URL.revokeObjectURL(imagePreview);
       setImage(file);
       setImagePreview(URL.createObjectURL(file));
     }
   };
 
   const removeImage = () => {
+    if (imagePreview) URL.revokeObjectURL(imagePreview);
     setImage(null);
     setImagePreview(null);
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
+
+  // Cleanup blob URL on unmount
+  useEffect(() => {
+    document.title = 'Create Post | Sopher';
+    return () => {
+      if (imagePreview) URL.revokeObjectURL(imagePreview);
+    };
+  }, [imagePreview]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();

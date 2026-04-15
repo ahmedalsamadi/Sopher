@@ -3,6 +3,8 @@ const router = express.Router();
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { check, validationResult } = require('express-validator');
+const config = require('config');
+const { authLimiter } = require('../../middleware/rateLimiter');
 
 const User = require('../../models/User');
 
@@ -11,6 +13,7 @@ const User = require('../../models/User');
 // @access  Public
 router.post(
   '/',
+  authLimiter,
   [
     check('name', 'Name is required').not().isEmpty(),
     check('email', 'Please include a valid email').isEmail(),
@@ -52,7 +55,7 @@ router.post(
 
       jwt.sign(
         payload,
-        process.env.JWT_SECRET,
+        process.env.jwtSecret || config.get('jwtSecret'),
         { expiresIn: '5 days' },
         (err, token) => {
           if (err) throw err;

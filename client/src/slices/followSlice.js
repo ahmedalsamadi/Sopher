@@ -7,7 +7,7 @@ export const followUser = createAsyncThunk('follow/followUser', async (userId, {
     const res = await api.put(`/follow/${userId}`);
     return { userId, ...res.data };
   } catch (err) {
-    return rejectWithValue(err.response.data);
+    return rejectWithValue(err.response?.data || { msg: 'Network error' });
   }
 });
 
@@ -17,7 +17,7 @@ export const unfollowUser = createAsyncThunk('follow/unfollowUser', async (userI
     const res = await api.delete(`/follow/${userId}`);
     return { userId, ...res.data };
   } catch (err) {
-    return rejectWithValue(err.response.data);
+    return rejectWithValue(err.response?.data || { msg: 'Network error' });
   }
 });
 
@@ -27,7 +27,7 @@ export const getSuggestions = createAsyncThunk('follow/getSuggestions', async (_
     const res = await api.get('/follow/suggestions');
     return res.data;
   } catch (err) {
-    return rejectWithValue(err.response.data);
+    return rejectWithValue(err.response?.data || { msg: 'Network error' });
   }
 });
 
@@ -37,7 +37,7 @@ export const getFollowingFeed = createAsyncThunk('follow/getFollowingFeed', asyn
     const res = await api.get('/follow/following-feed');
     return res.data;
   } catch (err) {
-    return rejectWithValue(err.response.data);
+    return rejectWithValue(err.response?.data || { msg: 'Network error' });
   }
 });
 
@@ -47,7 +47,7 @@ export const getPopularPosts = createAsyncThunk('follow/getPopularPosts', async 
     const res = await api.get(`/posts/popular${period ? `?period=${period}` : ''}`);
     return res.data;
   } catch (err) {
-    return rejectWithValue(err.response.data);
+    return rejectWithValue(err.response?.data || { msg: 'Network error' });
   }
 });
 
@@ -55,9 +55,9 @@ export const getPopularPosts = createAsyncThunk('follow/getPopularPosts', async 
 export const getFollowStatus = createAsyncThunk('follow/getFollowStatus', async (userId, { rejectWithValue }) => {
   try {
     const res = await api.get(`/follow/status/${userId}`);
-    return res.data;
+    return { ...res.data, userId };
   } catch (err) {
-    return rejectWithValue(err.response.data);
+    return rejectWithValue(err.response?.data || { msg: 'Network error' });
   }
 });
 
@@ -67,7 +67,7 @@ export const getMyFollowLists = createAsyncThunk('follow/getMyFollowLists', asyn
     const res = await api.get(`/follow/users/${userId}`);
     return res.data;
   } catch (err) {
-    return rejectWithValue(err.response.data);
+    return rejectWithValue(err.response?.data || { msg: 'Network error' });
   }
 });
 
@@ -82,7 +82,10 @@ const followSlice = createSlice({
     followingCount: 0,
     myFollowers: [],
     myFollowing: [],
-    loading: false,
+    suggestionsLoading: false,
+    feedLoading: false,
+    popularLoading: false,
+    followListsLoading: false,
     error: null
   },
   reducers: {
@@ -98,10 +101,15 @@ const followSlice = createSlice({
       // Follow
       .addCase(followUser.fulfilled, (state, action) => {
         const { userId, following } = action.payload;
-        state.followingIds.push(userId);
+        if (!state.followingIds.includes(userId)) {
+          state.followingIds.push(userId);
+        }
         state.followingCount = following?.length || state.followingCount + 1;
         // Remove from suggestions
         state.suggestions = state.suggestions.filter((u) => u._id !== userId);
+      })
+      .addCase(followUser.rejected, (state, action) => {
+        state.error = action.payload;
       })
       // Unfollow
       .addCase(unfollowUser.fulfilled, (state, action) => {
@@ -109,52 +117,58 @@ const followSlice = createSlice({
         state.followingIds = state.followingIds.filter((id) => id !== userId);
         state.followingCount = following?.length || Math.max(0, state.followingCount - 1);
       })
+      .addCase(unfollowUser.rejected, (state, action) => {
+        state.error = action.payload;
+      })
       // Suggestions
       .addCase(getSuggestions.pending, (state) => {
-        state.loading = true;
+        state.suggestionsLoading = true;
       })
       .addCase(getSuggestions.fulfilled, (state, action) => {
         state.suggestions = action.payload;
-        state.loading = false;
+        state.suggestionsLoading = false;
       })
       .addCase(getSuggestions.rejected, (state, action) => {
         state.error = action.payload;
-        state.loading = false;
+        state.suggestionsLoading = false;
       })
       // Following feed
       .addCase(getFollowingFeed.pending, (state) => {
-        state.loading = true;
+        state.feedLoading = true;
       })
       .addCase(getFollowingFeed.fulfilled, (state, action) => {
         state.followingFeed = action.payload;
-        state.loading = false;
+        state.feedLoading = false;
       })
       .addCase(getFollowingFeed.rejected, (state, action) => {
         state.error = action.payload;
-        state.loading = false;
+        state.feedLoading = false;
       })
       // Popular posts
       .addCase(getPopularPosts.pending, (state) => {
-        state.loading = true;
+        state.popularLoading = true;
       })
       .addCase(getPopularPosts.fulfilled, (state, action) => {
         state.popularPosts = action.payload;
-        state.loading = false;
+        state.popularLoading = false;
       })
       .addCase(getPopularPosts.rejected, (state, action) => {
         state.error = action.payload;
-        state.loading = false;
+        state.popularLoading = false;
       })
       // Follow status
       .addCase(getFollowStatus.fulfilled, (state, action) => {
-        const { isFollowing, followersCount, followingCount } = action.payload;
+        const { isFollowing, followersCount, followingCount, userId } = action.payload;
         state.followersCount = followersCount;
         state.followingCount = followingCount;
-        if (isFollowing) {
-          // mark in followingIds if not already present
+        if (isFollowing && userId && !state.followingIds.includes(userId)) {
+          state.followingIds.push(userId);
         }
       })
       // My follow lists
+      .addCase(getMyFollowLists.pending, (state) => {
+        state.followListsLoading = true;
+      })
       .addCase(getMyFollowLists.fulfilled, (state, action) => {
         state.myFollowers = action.payload.followers;
         state.myFollowing = action.payload.following;
@@ -163,9 +177,15 @@ const followSlice = createSlice({
         );
         state.followersCount = action.payload.followers.length;
         state.followingCount = action.payload.following.length;
+        state.followListsLoading = false;
+      })
+      .addCase(getMyFollowLists.rejected, (state, action) => {
+        state.error = action.payload;
+        state.followListsLoading = false;
       });
   }
 });
 
 export const { clearFollowState } = followSlice.actions;
 export default followSlice.reducer;
+

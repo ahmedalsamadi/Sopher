@@ -1,7 +1,6 @@
 import React, { useEffect } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { getNotifications, markAllRead, markAsRead } from '../../slices/notificationSlice';
-import { Link } from 'react-router-dom';
 import { getAssetUrl } from '../../utils/api';
 
 const Notifications = () => {
@@ -9,6 +8,7 @@ const Notifications = () => {
   const { notifications, loading } = useSelector((state) => state.notification);
 
   useEffect(() => {
+    document.title = 'Notifications | Sopher';
     dispatch(getNotifications());
   }, [dispatch]);
 
@@ -44,6 +44,8 @@ const Notifications = () => {
         return '❤️';
       case 'comment':
         return '💬';
+      case 'follow':
+        return '👤';
       default:
         return '🔔';
     }
@@ -61,6 +63,12 @@ const Notifications = () => {
         return (
           <>
             <strong>{notification.senderName}</strong> commented on your post
+          </>
+        );
+      case 'follow':
+        return (
+          <>
+            <strong>{notification.senderName}</strong> started following you
           </>
         );
       default:

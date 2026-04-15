@@ -1,9 +1,13 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Link, Navigate } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 
 const Landing = () => {
   const { isAuthenticated } = useSelector((state) => state.auth);
+
+  useEffect(() => {
+    document.title = 'Sopher — Connect, Share, Discover';
+  }, []);
 
   if (isAuthenticated) {
     return <Navigate to="/dashboard" />;

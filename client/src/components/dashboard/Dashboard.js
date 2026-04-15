@@ -1,6 +1,5 @@
 import React, { useEffect } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
-import { loadUser } from '../../slices/authSlice';
 import { getCurrentProfile } from '../../slices/profileSlice';
 
 const Dashboard = () => {
@@ -9,7 +8,7 @@ const Dashboard = () => {
   const { profile, loading } = useSelector((state) => state.profile);
 
   useEffect(() => {
-    dispatch(loadUser());
+    document.title = 'Dashboard | Sopher';
     dispatch(getCurrentProfile());
   }, [dispatch]);
 
