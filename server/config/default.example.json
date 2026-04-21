@@ -1,0 +1,4 @@
+{
+  "mongoURI": "YOUR_MONGO_URI_HERE",
+  "jwtSecret": "YOUR_JWT_SECRET_HERE"
+}

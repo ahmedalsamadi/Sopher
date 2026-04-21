@@ -1,3 +1,6 @@
 .env
 node_modules
 npm-debug.log*
+config/default.json
+uploads/*
+!uploads/.gitkeep
